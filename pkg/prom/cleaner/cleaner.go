@@ -1,4 +1,4 @@
-package prom
+package cleaner
 
 import (
 	"fmt"
@@ -14,27 +14,38 @@ import (
 	promwal "github.com/prometheus/prometheus/tsdb/wal"
 )
 
-// TODO(nickp): Figure out how to actually "wire" this into the Agent
+type walCleaner struct {
+	logger          log.Logger
+	walDirectory    string
+	instanceManager instance.Manager
+	minAge          time.Duration
+	ticker          *time.Ticker
+	done            chan bool
+}
 
 type Cleaner interface {
 	// Delete any storage (Prometheus WAL) no longer associated with a instance.ManagedInstance
-	CleanupStorage(instances map[string]instance.ManagedInstance) error
+	CleanupStorage() error
+
+	// Stop any tasks running
+	Stop()
 }
 
 // Create a new Cleaner implementation that looks for abandoned WALs in the given
-// directory and removes them if they haven't been modified in over minAge.
-func NewCleaner(logger log.Logger, walDirectory string, minAge time.Duration) Cleaner {
-	return &walCleaner{
-		logger:       logger,
-		walDirectory: walDirectory,
-		minAge:       minAge,
+// directory and removes them if they haven't been modified in over minAge. Starts
+// a goroutine to periodically run Cleaner.CleanupStorage in a loop
+func NewCleaner(logger log.Logger, manager instance.Manager, walDirectory string, minAge time.Duration, period time.Duration) Cleaner {
+	c := &walCleaner{
+		logger:          logger,
+		instanceManager: manager,
+		walDirectory:    walDirectory,
+		minAge:          minAge,
+		ticker:          time.NewTicker(period),
+		done:            make(chan bool),
 	}
-}
 
-type walCleaner struct {
-	logger       log.Logger
-	walDirectory string
-	minAge       time.Duration
+	go c.run()
+	return c
 }
 
 // Get storage directories used for each ManagedInstance
@@ -134,12 +145,34 @@ func (c *walCleaner) abandonedStorage(instances map[string]instance.ManagedInsta
 	return out
 }
 
-func (c *walCleaner) CleanupStorage(instances map[string]instance.ManagedInstance) error {
+func (c *walCleaner) run() {
+	for {
+		select {
+		case <-c.done:
+			return
+		case <-c.ticker.C:
+			err := c.CleanupStorage()
+			if err != nil {
+				level.Error(c.logger).Log("msg", "cleanup failed", "err", err)
+			}
+		}
+	}
+}
+
+func (c *walCleaner) CleanupStorage() error {
+	instances := c.instanceManager.ListInstances()
 	abandoned := c.abandonedStorage(instances, time.Now())
+
 	for _, a := range abandoned {
 		// TODO(nickp) actually remove instead of logging
 		level.Info(c.logger).Log("msg", "would delete WAL", "name", a)
 	}
 
 	return nil
+}
+
+func (c *walCleaner) Stop() {
+	level.Debug(c.logger).Log("msg", "stopping cleaner...")
+	c.ticker.Stop()
+	close(c.done)
 }

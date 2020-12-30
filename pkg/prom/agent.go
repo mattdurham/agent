@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"github.com/grafana/agent/pkg/prom/cleaner"
 	"github.com/grafana/agent/pkg/prom/ha"
 	"github.com/grafana/agent/pkg/prom/ha/client"
 	"github.com/grafana/agent/pkg/prom/instance"
@@ -141,7 +142,8 @@ type Agent struct {
 	logger log.Logger
 	reg    prometheus.Registerer
 
-	cm instance.Manager
+	cm      instance.Manager
+	cleaner cleaner.Cleaner
 
 	instanceFactory instanceFactory
 
@@ -172,6 +174,11 @@ func newAgent(reg prometheus.Registerer, cfg Config, logger log.Logger, fact ins
 	// Regardless of the instance mode, wrap the manager in a CountingManager so we can
 	// collect metrics on the number of active configs.
 	a.cm = instance.NewCountingManager(reg, a.cm)
+
+	// Periodically attempt to clean up WALs from instances that aren't being run by
+	// this agent anymore.
+	// TODO(nickp): Set minAge and the check period from configuration
+	a.cleaner = cleaner.NewCleaner(a.logger, a.cm, cfg.WALDir, 12*time.Hour, 30*time.Second)
 
 	allConfigsValid := true
 	for _, c := range cfg.Configs {
@@ -230,6 +237,7 @@ func (a *Agent) Stop() {
 			level.Error(a.logger).Log("msg", "failed to stop scraping service server", "err", err)
 		}
 	}
+	a.cleaner.Stop()
 	a.cm.Stop()
 }
 
