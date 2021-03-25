@@ -3554,9 +3554,13 @@ Full reference of options:
 #### smtp_config
 
 ```yaml
-  # Directory to read text files with metrics from.
-  # Maps to collector.textfile.directory in windows_exporter
-  [text_file_directory: <string> | default="C:\Program Files\windows_exporter\textfile_inputs"]
+  # Regexp of virtual servers to whitelist. Server name must both match whitelist and not match blacklist to be included.
+  # Maps to collector.smtp.server-whitelist in windows_exporter
+  [whitelist: <string> | default=".+"]
+  
+  # Regexp of virtual servers to blacklist. Server name must both match whitelist and not match blacklist to be included.
+  # Maps to collector.smtp.server-blacklist in windows_exporter
+  [blacklist: <string> | default=""]
 ```
 
 
