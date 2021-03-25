@@ -3,6 +3,8 @@ package windows_exporter //nolint:golint
 import (
 	"reflect"
 
+	"gopkg.in/alecthomas/kingpin.v2"
+
 	"github.com/prometheus-community/windows_exporter/collector"
 
 	"github.com/go-kit/kit/log"
@@ -22,7 +24,7 @@ type Config struct {
 	EnabledCollectors string `yaml:"enabled_collectors"`
 
 	Exchange    *ExchangeConfig    `yaml:"exchange"`
-	IIS         *IISConfig         `yaml:"iis"`
+	IIS         IISConfig          `yaml:"iis"`
 	TextFile    *TextFileConfig    `yaml:"text_file"`
 	SMTP        *SMTPConfig        `yaml:"smtp"`
 	Service     *ServiceConfig     `yaml:"service"`
@@ -31,12 +33,6 @@ type Config struct {
 	MSSQL       *MSSQLConfig       `yaml:"mssql"`
 	MSMQ        *MSMQConfig        `yaml:"msmq"`
 	LogicalDisk *LogicalDiskConfig `yaml:"logical_disk"`
-}
-
-// UnmarshalYAML implements yaml.Unmarshaler for Config.
-func (c *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
-	type plain Config
-	return unmarshal((*plain)(c))
 }
 
 func (c *Config) Name() string {
@@ -51,6 +47,7 @@ func (c *Config) NewIntegration(l log.Logger) (integrations.Integration, error) 
 	return New(l, c)
 }
 
+/*
 // The Windows Collector takes a map of configuration to set, so we need to convert from agent config to a key value
 // using the windows_exporter key name 'collector.iis.site-whitelist' for example.
 func (c *Config) ConvertToMap() map[string]string {
@@ -67,7 +64,8 @@ func (c *Config) ConvertToMap() map[string]string {
 	translateConfig(c.TextFile, configMap)
 	return configMap
 }
-
+*/
+/*
 func (c *Config) ApplyConfig(exporterConfigs map[string]collector.Config) {
 	agentConfigs := []translatableConfig{
 		c.Exchange,
@@ -94,7 +92,7 @@ func (c *Config) ApplyConfig(exporterConfigs map[string]collector.Config) {
 			}
 		}
 	}
-}
+}*/
 
 type ExchangeConfig struct {
 	EnabledList *string `yaml:"enabled_list"`
@@ -112,6 +110,65 @@ func (c *ExchangeConfig) Sync(v interface{}) bool {
 	return ok
 }
 
+func (c *Config) unmarshalYAML(unmarshal func(interface{}) error) error {
+	type plain Config
+	return unmarshal((*plain)(c))
+}
+
+func (c *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
+
+	type plain Config
+	return unmarshal((*plain)(c))
+}
+
+type IISConfig collector.IISConfig
+
+func (c *IISConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	assignDefaults((*collector.IISConfig)(c))
+
+	// Re-declare IISConfig with YAML tags. This can be converted to an IISConfig
+	// freely as long as the types are structurally identical.
+	type plain struct {
+		SiteWhiteList string `yaml:"site_whitelist"`
+		SiteBlackList string `yaml:"site_blacklist"`
+		AppWhiteList  string `yaml:"app_whitelist"`
+		AppBlackList  string `yaml:"app_blacklist"`
+	}
+
+	// Convert our existing IISConfig to a plain. This IISConfig should already
+	// have default values from the kingpin via Config.UnmarshalYAML already
+	// being called first. Note that YAML's unmarshaler doesn't fill in fields
+	// that don't exist, so we don't need pointers here.
+	p := plain(*c)
+	if err := unmarshal(&p); err != nil {
+		return err
+	}
+	*c = IISConfig(p)
+	return nil
+}
+
+func (c *IISConfig) Sync(v interface{}) bool {
+	/*other, ok := v.(*collector.IISConfig)
+	if ok {
+		*other = collector.IISConfig(*c)
+	}
+	return ok*/
+	return false
+}
+
+func assignDefaults(c collector.Config) {
+	// Create a fake application to force defaults to be applied
+	app := kingpin.New("", "")
+	c.RegisterKingpin(app)
+
+	// Parse an empty set of flags, which will fill in default values for everything.
+	_, err := app.Parse([]string{})
+	if err != nil {
+		panic(err)
+	}
+}
+
+/*
 type IISConfig struct {
 	SiteWhiteList *string `yaml:"site_whitelist"`
 	SiteBlackList *string `yaml:"site_blacklist"`
@@ -135,7 +192,7 @@ func (c *IISConfig) Sync(v interface{}) bool {
 		setStringIfNotNil(c.AppBlackList, &other.AppBlackList)
 	}
 	return ok
-}
+}*/
 
 type TextFileConfig struct {
 	TextFileDirectory *string `yaml:"text_file_directory"`
