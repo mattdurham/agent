@@ -3603,7 +3603,7 @@ Full reference of options:
 ```yaml
   # Comma-separated list of mssql WMI classes to use.
   # Maps to collectors.mssql.classes-enabled in windows_exporter
-  [enable_classes: <string> | default="accessmethods,availreplica,bufman,databases,dbreplica,genstats,locks,memmgr,sqlstats,sqlerrors,transactions"]
+  [enabled_classes: <string> | default="accessmethods,availreplica,bufman,databases,dbreplica,genstats,locks,memmgr,sqlstats,sqlerrors,transactions"]
 ```
 
 
