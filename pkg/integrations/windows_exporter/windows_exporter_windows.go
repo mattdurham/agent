@@ -4,14 +4,18 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/grafana/agent/pkg/integrations"
+	"github.com/prometheus-community/windows_exporter/collector"
 	"github.com/prometheus-community/windows_exporter/exporter"
 )
 
-// New creates a new node_exporter integration.
+// New creates a new windows_exporter integration.
 func New(log log.Logger, c *Config) (integrations.Integration, error) {
-	configMap := exporter.GenerateConfigs()
-	c.ApplyConfig(configMap)
-	wc, err := exporter.NewWindowsCollector(c.Name(), c.EnabledCollectors, configMap)
+	//configMap := exporter.GenerateConfigs()
+	//c.ApplyConfig(configMap)
+	cm := make(map[string]collector.Config)
+	iis := (*collector.IISConfig)(&c.IIS)
+	cm["iis"] = iis
+	wc, err := exporter.NewWindowsCollector(c.Name(), c.EnabledCollectors, cm)
 	if err != nil {
 		return nil, err
 	}
